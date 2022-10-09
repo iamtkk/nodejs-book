@@ -4,14 +4,11 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const dotenv = require('dotenv');
 const path = require('path');
-const indexRouter = require('./routes');
-const userRouter = require('./routes/user');
 
 dotenv.config();
 const app = express();
 app.set('port', process.env.PORT || 3000);
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'pug');
+
 app.use(morgan('dev'));
 app.use('/', express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -21,7 +18,7 @@ app.use(
   session({
     resave: false,
     saveUninitialized: false,
-    secret: 'process.env.COOKIE_SECRET',
+    secret: process.env.COOKIE_SECRET,
     cookie: {
       httpOnly: true,
       secure: false,
@@ -30,13 +27,38 @@ app.use(
   })
 );
 
-app.use('/', indexRouter);
-app.use('/user', userRouter);
+const multer = require('multer');
+const fs = require('fs');
 
-app.use((req, res, next) => {
-  console.log('모든 요청에 다 실행됩니다.');
-  next();
+try {
+  fs.readdirSync('uploads');
+} catch (error) {
+  console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+  fs.mkdirSync('uploads');
+}
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, done) {
+      done(null, 'uploads/');
+    },
+    filename(req, file, done) {
+      const ext = path.extname(file.originalname);
+      done(null, path.basename(file.originalname, ext) + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
+app.get('/upload', (req, res) => {
+  res.sendFile(path.join(__dirname, 'multipart_upload.html'));
+});
+app.post(
+  '/upload',
+  upload.fields([{ name: 'image1' }, { name: 'image2' }]),
+  (req, res) => {
+    console.log(req.files, req.body);
+    res.send('ok');
+  }
+);
 
 app.get(
   '/',
@@ -48,12 +70,11 @@ app.get(
     throw new Error('에러는 에러 처리 미들웨어로 갑니다.');
   }
 );
-
 app.use((err, req, res, next) => {
-  console.log(err);
+  console.error(err);
   res.status(500).send(err.message);
 });
 
 app.listen(app.get('port'), () => {
-  console.log(app.get('port'), '번 포트에서 대기중');
+  console.log(app.get('port'), '번 포트에서 대기 중');
 });
